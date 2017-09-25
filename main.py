@@ -17,6 +17,7 @@ from scripts.find_files import find_yml_files, get_readme_file, get_logo_file
 from scripts.requires_auth import requires_auth, authentication_enabled, \
   disable_authentication, set_authentication
 from scripts.manage_project import manage
+from ipdb import set_trace
 
 # Flask Application
 API_V1 = '/api/v1/'
@@ -25,6 +26,31 @@ COMPOSE_REGISTRY = os.getenv('DOCKER_COMPOSE_REGISTRY') or 'https://www.composer
 
 logging.basicConfig(level=logging.INFO)
 app = Flask(__name__, static_url_path='')
+
+
+@app.route(API_V1 + "ips", methods=['GET'])
+def list_ips():
+    """
+    List docker ips
+    """
+    list_container = []
+    for container in  containers():
+        container_json = {}
+        ip = []
+        ipv6 = []
+        #for network in container.get("NetworkSettings").get("Networks").keys():
+            #ip.append(container.get("NetworkSettings").get("Networks").get(network).get('IPAddress'))
+            #ipv6.append(container.get("NetworkSettings").get("Networks").get(network).get('IPAddress'))
+        ip.append(container.get("NetworkSettings").get("Networks").get("bridge").get('IPAddress').encode('ascii'))
+        ipv6.append(container.get("NetworkSettings").get("Networks").get("bridge").get('GlobalIPv6Address').encode('ascii'))
+        container_json['name'] = container.get("Image").encode('ascii')
+        container_json['ip'] = " ".join(ip)
+        container_json['ipv6'] = " ".join(ipv6)
+        list_container.append(container_json)
+    #set_trace()
+    return jsonify(containers=list_container)
+
+
 
 def load_projects():
     """
@@ -49,6 +75,8 @@ def get_project_with_name(name):
     """
     path = projects[name]
     return get_project(path)
+
+
 
 # REST endpoints
 @app.route(API_V1 + "projects", methods=['GET'])
@@ -485,4 +513,4 @@ def handle_generic_error(err):
 
 # run app
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', debug=False, threaded=True)
+    app.run(host='0.0.0.0', debug=True, threaded=True)
