@@ -36,19 +36,26 @@ def list_ips():
     list_container = []
     for container in  containers():
         container_json = {}
-        ip = []
-        ipv6 = []
-        #for network in container.get("NetworkSettings").get("Networks").keys():
-            #ip.append(container.get("NetworkSettings").get("Networks").get(network).get('IPAddress'))
-            #ipv6.append(container.get("NetworkSettings").get("Networks").get(network).get('IPAddress'))
-        ip.append(container.get("NetworkSettings").get("Networks").get("bridge").get('IPAddress').encode('ascii'))
-        ipv6.append(container.get("NetworkSettings").get("Networks").get("bridge").get('GlobalIPv6Address').encode('ascii'))
-        container_json['name'] = container.get("Image").encode('ascii')
-        container_json['ip'] = " ".join(ip)
-        container_json['ipv6'] = " ".join(ipv6)
+        ip = container.get("NetworkSettings"). \
+                            get("Networks"). \
+                            get("bridge"). \
+                            get('IPAddress')
+        ipv6 = container.get("NetworkSettings"). \
+                             get("Networks"). \
+                             get("bridge"). \
+                             get('GlobalIPv6Address')
+        container_json['name'] = container.get("Image")
+        container_json['ip'] = ip
+        container_json['ipv6'] = ipv6 
         list_container.append(container_json)
-    #set_trace()
-    return jsonify(containers=list_container)
+    
+    if "format" in request.args and request.args.get('format') == "json":
+        return jsonify(containers=list_container)
+    else:
+        pretty =  ""
+        for container in list_container:
+            pretty += "{:40s} {:30s} {:30s}\n".format(container.get('name'), container.get('ip'), container.get('ipv6'))
+    return  pretty
 
 
 
@@ -513,4 +520,5 @@ def handle_generic_error(err):
 
 # run app
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', debug=True, threaded=True)
+    #app.run(host='0.0.0.0', debug=False, threaded=True)
+    app.run(host='0.0.0.0', debug=True)
