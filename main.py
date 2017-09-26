@@ -17,7 +17,7 @@ from scripts.find_files import find_yml_files, get_readme_file, get_logo_file
 from scripts.requires_auth import requires_auth, authentication_enabled, \
   disable_authentication, set_authentication
 from scripts.manage_project import manage
-from ipdb import set_trace
+#from ipdb import set_trace
 
 # Flask Application
 API_V1 = '/api/v1/'
@@ -26,8 +26,6 @@ COMPOSE_REGISTRY = os.getenv('DOCKER_COMPOSE_REGISTRY') or 'https://www.composer
 
 logging.basicConfig(level=logging.INFO)
 app = Flask(__name__, static_url_path='')
-
-
 
 
 def load_projects():
@@ -67,6 +65,7 @@ def ip_list_containers_enabled():
                              get("Networks"). \
                              get("bridge"). \
                              get('GlobalIPv6Address')
+        container_json['finding'] = container.get('Labels').get('com.docker.compose.project')
         container_json['name'] = container.get("Image")
         container_json['ip'] = ip
         container_json['ipv6'] = ipv6 
@@ -75,9 +74,14 @@ def ip_list_containers_enabled():
     if "format" in request.args and request.args.get('format') == "json":
         return jsonify(containers=list_container)
     else:
-        pretty =  "Enabled container\n"
+        pretty =  "Running containers\n"
+        pretty += "{:20} {:35s} {:20s} {:20s}\n".format("Finding", "Container", "Ip", "Ipv6")
+        
         for container in list_container:
-            pretty += "{:35s} {:20s} {:20s}\n".format(container.get('name'), container.get('ip'), container.get('ipv6'))
+            pretty += "{:20} {:35s} {:20s} {:20s}\n".format(container.get('finding'), \
+                                                     container.get('name'), \
+                                                     container.get('ip'), \
+                                                     container.get('ipv6'))
     return  pretty
 
 def ip_list_containers_all():
@@ -92,6 +96,7 @@ def ip_list_containers_all():
 
 
 @app.route(API_V1 + "list", methods=['GET'])
+@requires_auth
 def list_ips():
     """
         List containers and their ips
@@ -110,6 +115,7 @@ def list_ips():
 
 # REST endpoints
 @app.route(API_V1 + "projects", methods=['GET'])
+@requires_auth
 def list_projects():
     """
     List docker compose projects
@@ -120,23 +126,16 @@ def list_projects():
         else [] for container in containers()]
     return jsonify(projects=projects, active=active)
 
-@app.route(API_V1 + "remove/<name>", methods=['DELETE'])
-@requires_auth
-def rm_(name):
-    """
-    remove previous cached containers. docker-compose rm -f
-    """
-    project = get_project_with_name(name)
-    project.remove_stopped()
-    return jsonify(command='rm')
 
 @app.route(API_V1 + "projects/<name>", methods=['GET'])
+@requires_auth
 def project_containers(name):
     """
     get project details
     """
     project = get_project_with_name(name)
     return jsonify(containers=ps_(project))
+
 
 @app.route(API_V1 + "projects/<project>/<service_id>", methods=['POST'])
 @requires_auth
@@ -160,6 +159,7 @@ def run_service(project, service_id):
         )
 
 @app.route(API_V1 + "projects/yml/<name>", methods=['GET'])
+@requires_auth
 def project_yml(name):
     """
     get yml content
@@ -179,6 +179,7 @@ def project_yml(name):
 
 
 @app.route(API_V1 + "projects/readme/<name>", methods=['GET'])
+@requires_auth
 def get_project_readme(name):
     """
     get README.md or readme.md if available
@@ -187,6 +188,7 @@ def get_project_readme(name):
     return jsonify(readme=get_readme_file(path))
 
 @app.route(API_V1 + "projects/logo/<name>", methods=['GET'])
+@requires_auth
 def get_project_logo(name):
     """
     get logo.png if available
@@ -195,6 +197,7 @@ def get_project_logo(name):
     return get_logo_file(path) or ""
 
 @app.route(API_V1 + "projects/<name>/<container_id>", methods=['GET'])
+@requires_auth
 def project_container(name, container_id):
     """
     get container details
@@ -218,39 +221,6 @@ def project_container(name, container_id):
         repo_tags=container.image_config['RepoTags']
         )
 
-@app.route(API_V1 + "projects/<name>", methods=['DELETE'])
-@requires_auth
-def kill(name):
-    """
-    docker-compose kill
-    """
-    get_project_with_name(name).kill()
-    return jsonify(command='kill')
-
-@app.route(API_V1 + "projects", methods=['PUT'])
-@requires_auth
-def pull():
-    """
-    docker-compose pull
-    """
-    name = loads(request.data)["id"]
-    get_project_with_name(name).pull()
-    return jsonify(command='pull')
-
-@app.route(API_V1 + "services", methods=['PUT'])
-@requires_auth
-def scale():
-    """
-    docker-compose scale
-    """
-    req = loads(request.data)
-    name = req['project']
-    service_name = req['service']
-    num = req['num']
-
-    project = get_project_with_name(name)
-    project.get_service(service_name).scale(desired_num=int(num))
-    return jsonify(command='scale')
 
 @app.route(API_V1 + "projects", methods=['POST'])
 @requires_auth
@@ -258,6 +228,7 @@ def up_():
     """
     docker-compose up
     """
+    print request.data
     req = loads(request.data)
     name = req["id"]
     service_names = req.get('service_names', None)
@@ -273,12 +244,10 @@ def up_():
             'containers': [container.name for container in container_list]
         })
 
+"""
 @app.route(API_V1 + "build", methods=['POST'])
 @requires_auth
 def build():
-    """
-    docker-compose build
-    """
     json = loads(request.data)
     name = json["id"]
 
@@ -293,9 +262,6 @@ def build():
 @app.route(API_V1 + "create", methods=['POST'])
 @requires_auth
 def create_project():
-    """
-    create new project
-    """
     data = loads(request.data)
 
     file_path = manage(YML_PATH + '/' +  data["name"], data["yml"], False)
@@ -308,39 +274,11 @@ def create_project():
     load_projects()
 
     return jsonify(path=file_path)
-
-
-@app.route(API_V1 + "update-project", methods=['PUT'])
-@requires_auth
-def update_project():
-    """
-    update project
-    """
-    data = loads(request.data)
-    file_path = manage(YML_PATH + '/' +  data["name"], data["yml"], True)
-
-    if 'env' in data and data["env"]:
-        env_file = open(YML_PATH + '/' + data["name"] + "/.env", "w")
-        env_file.write(data["env"])
-        env_file.close()
-
-    return jsonify(path=file_path)
-
-
-@app.route(API_V1 + "remove-project/<name>", methods=['DELETE'])
-@requires_auth
-def remove_project(name):
-    """
-    remove project
-    """
-
-    directory = YML_PATH + '/' + name
-    rmtree(directory)
-    load_projects()
-    return jsonify(path=directory)
+"""
 
 
 @app.route(API_V1 + "search", methods=['POST'])
+@requires_auth
 def search():
     """
     search for a project on a docker-compose registry (e.g. www.composeregistry.com)
@@ -355,6 +293,7 @@ def search():
 
 
 @app.route(API_V1 + "yml", methods=['POST'])
+@requires_auth
 def yml():
     """
     get yml content from a docker-compose registry (e.g. www.composeregistry.com)
@@ -417,6 +356,7 @@ def restart():
 
 @app.route(API_V1 + "logs/<name>", defaults={'limit': "all"}, methods=['GET'])
 @app.route(API_V1 + "logs/<name>/<int:limit>", methods=['GET'])
+@requires_auth
 def logs(name, limit):
     """
     docker-compose logs
@@ -439,6 +379,7 @@ def container_logs(name, container_id, limit):
     return jsonify(logs=lines)
 
 @app.route(API_V1 + "host", methods=['GET'])
+@requires_auth
 def host():
     """
     docker host info
@@ -448,6 +389,7 @@ def host():
     return jsonify(host=host_value, workdir=os.getcwd() if YML_PATH == '.' else YML_PATH)
 
 @app.route(API_V1 + "compose-registry", methods=['GET'])
+@requires_auth
 def compose_registry():
     """
     docker compose registry
@@ -455,6 +397,7 @@ def compose_registry():
     return jsonify(url = COMPOSE_REGISTRY)
 
 @app.route(API_V1 + "web_console_pattern", methods=['GET'])
+@requires_auth
 def get_web_console_pattern():
     """
     forward WEB_CONSOLE_PATTERN env var from server to spa
@@ -462,6 +405,7 @@ def get_web_console_pattern():
     return jsonify(web_console_pattern=os.getenv('WEB_CONSOLE_PATTERN'))
 
 @app.route(API_V1 + "health", methods=['GET'])
+@requires_auth
 def health():
     """
     docker health
@@ -483,22 +427,6 @@ def set_host():
         os.environ['DOCKER_HOST'] = new_host
         return jsonify(host=new_host)
 
-@app.route(API_V1 + "authentication", methods=['GET'])
-def authentication():
-    """
-    check if basic authentication is enabled
-    """
-    return jsonify(enabled=authentication_enabled())
-
-@app.route(API_V1 + "authentication", methods=['DELETE'])
-@requires_auth
-def disable_basic_authentication():
-    """
-    disable basic authentication
-    """
-    disable_authentication()
-    return jsonify(enabled=False)
-
 @app.route(API_V1 + "authentication", methods=['POST'])
 @requires_auth
 def enable_basic_authentication():
@@ -511,11 +439,14 @@ def enable_basic_authentication():
 
 # static resources
 @app.route("/")
+@requires_auth
 def index():
     """
     index.html
     """
     return app.send_static_file('index.html')
+
+
 
 ## basic exception handling
 
