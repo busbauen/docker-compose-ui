@@ -28,35 +28,6 @@ logging.basicConfig(level=logging.INFO)
 app = Flask(__name__, static_url_path='')
 
 
-@app.route(API_V1 + "ips", methods=['GET'])
-def list_ips():
-    """
-    List docker ips
-    """
-    list_container = []
-    for container in  containers():
-        container_json = {}
-        ip = container.get("NetworkSettings"). \
-                            get("Networks"). \
-                            get("bridge"). \
-                            get('IPAddress')
-        ipv6 = container.get("NetworkSettings"). \
-                             get("Networks"). \
-                             get("bridge"). \
-                             get('GlobalIPv6Address')
-        container_json['name'] = container.get("Image")
-        container_json['ip'] = ip
-        container_json['ipv6'] = ipv6 
-        list_container.append(container_json)
-    
-    if "format" in request.args and request.args.get('format') == "json":
-        return jsonify(containers=list_container)
-    else:
-        pretty =  ""
-        for container in list_container:
-            pretty += "{:40s} {:30s} {:30s}\n".format(container.get('name'), container.get('ip'), container.get('ipv6'))
-    return  pretty
-
 
 
 def load_projects():
@@ -82,6 +53,58 @@ def get_project_with_name(name):
     """
     path = projects[name]
     return get_project(path)
+
+
+def ip_list_containers_enabled():
+    list_container = []
+    for container in  containers():
+        container_json = {}
+        ip = container.get("NetworkSettings"). \
+                            get("Networks"). \
+                            get("bridge"). \
+                            get('IPAddress')
+        ipv6 = container.get("NetworkSettings"). \
+                             get("Networks"). \
+                             get("bridge"). \
+                             get('GlobalIPv6Address')
+        container_json['name'] = container.get("Image")
+        container_json['ip'] = ip
+        container_json['ipv6'] = ipv6 
+        list_container.append(container_json)
+    
+    if "format" in request.args and request.args.get('format') == "json":
+        return jsonify(containers=list_container)
+    else:
+        pretty =  "Enabled container\n"
+        for container in list_container:
+            pretty += "{:35s} {:20s} {:20s}\n".format(container.get('name'), container.get('ip'), container.get('ipv6'))
+    return  pretty
+
+def ip_list_containers_all():
+    load_projects()
+    if "format" in request.args and request.args.get('format') == "json":
+        return jsonify(containers=projects)
+    else:
+        container =  [c for c in projects]
+        container.sort()
+        pretty = "All containers\n%s\n" % "\n".join(container)
+        return pretty
+
+
+@app.route(API_V1 + "list", methods=['GET'])
+def list_ips():
+    """
+        List containers and their ips
+            per default:       returns a list enabled containers in text
+            GET Parameter
+            all=true           returns a list of all containers in text 
+            format=json        returns json
+
+    """
+    if "all" in request.args:
+         return ip_list_containers_all()
+    else:
+        return ip_list_containers_enabled()
 
 
 
@@ -169,7 +192,7 @@ def get_project_logo(name):
     get logo.png if available
     """
     path = projects[name]
-    return get_logo_file(path)
+    return get_logo_file(path) or ""
 
 @app.route(API_V1 + "projects/<name>/<container_id>", methods=['GET'])
 def project_container(name, container_id):
