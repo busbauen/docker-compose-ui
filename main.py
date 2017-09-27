@@ -52,11 +52,24 @@ def get_project_with_name(name):
     path = projects[name]
     return get_project(path)
 
+def find_full_name(name_docker):
+    # docker-compose names the container nullciphers_nginx_vuln_7530
+    # this is the name of the folder without underscores
+    # we need the name with _ (e.g. for grepping in other scripts)
+    for name_filesystem, __ in projects.iteritems():
+        if name_filesystem.replace("_","") == name_docker:
+            return name_filesystem
+
+    return name_docker
 
 def ip_list_containers_enabled():
     list_container = []
     for container in  containers():
         container_json = {}
+        container_name_docker = container.get('Labels').get('com.docker.compose.project')
+        if not container_name_docker:
+            continue
+        container_json['finding'] = find_full_name(container_name_docker)
         ip = container.get("NetworkSettings"). \
                             get("Networks"). \
                             get("bridge"). \
@@ -65,7 +78,6 @@ def ip_list_containers_enabled():
                              get("Networks"). \
                              get("bridge"). \
                              get('GlobalIPv6Address')
-        container_json['finding'] = container.get('Labels').get('com.docker.compose.project')
         container_json['name'] = container.get("Image")
         container_json['ip'] = ip
         container_json['ipv6'] = ipv6 
