@@ -83,6 +83,7 @@ def ip_list_containers_enabled():
         container_json['ipv6'] = ipv6 
         list_container.append(container_json)
     
+    list_container = sorted(list_container, key=lambda k: k['name'])
     if "format" in request.args and request.args.get('format') == "json":
         return jsonify(containers=list_container)
     else:
